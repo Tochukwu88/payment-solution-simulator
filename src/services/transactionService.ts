@@ -1,7 +1,11 @@
 import { buildIdempotencyHash } from "../common/idempotency";
 import type { AppLogger } from "../common/logger/appLogger";
 import { ResponseMessage } from "../constants/responseMessages";
-import { TransactionStatus } from "../constants/transactionStatus";
+import {
+  allowedNextStatuses,
+  isValidStatusTransition,
+  TransactionStatus,
+} from "../constants/transactionStatus";
 import type { Transaction } from "../entities/transaction";
 import {
   createTransactionSchema,
@@ -15,7 +19,6 @@ import {
   ConflictException,
   InternalServerErrorException,
   NotFoundException,
-  NotImplementedException,
   isHttpException,
 } from "../exceptions";
 import type { TransactionRepository } from "../repositories";
@@ -73,9 +76,33 @@ export class TransactionService {
     id: string,
     payload: UpdateTransactionDto,
   ): Promise<Transaction> {
-    validateDto(updateTransactionSchema, payload);
+    const dto = validateDto(updateTransactionSchema, payload);
 
-    throw new NotImplementedException();
+    try {
+      if (!id) {
+        throw new BadRequestException(ResponseMessage.MISSING_REQUIRED_FIELDS);
+      }
+
+      const existingTransaction =
+        await this.transactionRepository.findById(id);
+
+      if (!existingTransaction) {
+        throw new NotFoundException(ResponseMessage.NOT_FOUND);
+      }
+
+      this.assertStatusTransitionIsAllowed(
+        existingTransaction.status,
+        dto.status,
+      );
+
+      return await this.saveStatusChange(id, dto.status);
+    } catch (error) {
+      this.logger.error("Failed to update payment", error, {
+        transactionId: id,
+        requestedStatus: dto.status,
+      });
+      return this.throwError(error);
+    }
   }
 
   private resolveExistingTransaction(
@@ -116,6 +143,39 @@ export class TransactionService {
     });
 
     return transaction;
+  }
+
+  private async saveStatusChange(
+    id: string,
+    status: TransactionStatus,
+  ): Promise<Transaction> {
+    const transaction = await this.transactionRepository.update(id, status);
+
+    if (!transaction) {
+      throw new NotFoundException(ResponseMessage.NOT_FOUND);
+    }
+
+    this.logger.info("Transaction status updated", {
+      transactionId: transaction.id,
+      status: transaction.status,
+    });
+
+    return transaction;
+  }
+
+  private assertStatusTransitionIsAllowed(
+    currentStatus: TransactionStatus,
+    requestedStatus: TransactionStatus,
+  ): void {
+    if (isValidStatusTransition(currentStatus, requestedStatus)) {
+      return;
+    }
+
+    throw new ConflictException(ResponseMessage.INVALID_STATUS_TRANSITION, {
+      currentStatus,
+      requestedStatus,
+      allowedStatuses: allowedNextStatuses(currentStatus),
+    });
   }
 
   private throwError(error: unknown): never {

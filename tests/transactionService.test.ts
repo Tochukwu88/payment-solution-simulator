@@ -212,60 +212,163 @@ describe("TransactionService", () => {
     });
   });
 
-  // describe("updatePayment", () => {
-  //   it("moves the transaction to the requested status", async () => {
-  //     const created = await service.createPayment(buildPayment());
+  describe("updatePayment", () => {
+    async function createAt(status: TransactionStatus) {
+      const created = await service.createPayment(buildPayment());
 
-  //     const updated = await service.updatePayment(
-  //       created.id,
-  //       { status: TransactionStatus.COMPLETED },
-  //     );
+      if (status !== TransactionStatus.PENDING) {
+        await repository.update(created.id, status);
+      }
 
-  //     expect(updated.status).toBe(TransactionStatus.COMPLETED);
-  //     expect(updated.isCompleted()).toBe(true);
-  //   });
+      return created;
+    }
 
-  //   it("persists the new status", async () => {
-  //     const created = await service.createPayment(buildPayment());
+    it("moves the transaction to the requested status", async () => {
+      const created = await service.createPayment(buildPayment());
 
-  //     await service.updatePayment(created.id, { status: TransactionStatus.FAILED });
+      const updated = await service.updatePayment(created.id, {
+        status: TransactionStatus.COMPLETED,
+      });
 
-  //     await expect(service.retrievePayment(created.id)).resolves.toMatchObject({
-  //       status: TransactionStatus.FAILED,
-  //     });
-  //   });
+      expect(updated.status).toBe(TransactionStatus.COMPLETED);
+      expect(updated.isCompleted()).toBe(true);
+    });
 
-  //   it("changes nothing but the status", async () => {
-  //     const created = await service.createPayment(buildPayment());
+    it("persists the new status", async () => {
+      const created = await service.createPayment(buildPayment());
 
-  //     const updated = await service.updatePayment(
-  //       created.id,
-  //       { status: TransactionStatus.COMPLETED },
-  //     );
+      await service.updatePayment(created.id, {
+        status: TransactionStatus.FAILED,
+      });
 
-  //     expect(updated).toMatchObject({
-  //       id: created.id,
-  //       reference: created.reference,
-  //       amount: created.amount,
-  //       idempotencyHash: created.idempotencyHash,
-  //     });
-  //     expect(updated.createdAt).toEqual(created.createdAt);
-  //   });
+      await expect(service.retrievePayment(created.id)).resolves.toMatchObject({
+        status: TransactionStatus.FAILED,
+      });
+    });
 
-  //   it("throws NotFoundException for an unknown id", async () => {
-  //     await expect(
-  //       service.updatePayment("missing-id", { status: TransactionStatus.COMPLETED }),
-  //     ).rejects.toThrow(NotFoundException);
-  //   });
+    it("changes nothing but the status", async () => {
+      const created = await service.createPayment(buildPayment());
 
-  //   it("logs the status change", async () => {
-  //     const created = await service.createPayment(buildPayment());
+      const updated = await service.updatePayment(created.id, {
+        status: TransactionStatus.COMPLETED,
+      });
 
-  //     await service.updatePayment(created.id, { status: TransactionStatus.COMPLETED });
+      expect(updated).toMatchObject({
+        id: created.id,
+        reference: created.reference,
+        amount: created.amount,
+        idempotencyHash: created.idempotencyHash,
+      });
+      expect(updated.createdAt).toEqual(created.createdAt);
+    });
 
-  //     expect(loggerDriver.messagesAt("info")).toContain(
-  //       "Transaction status updated",
-  //     );
-  //   });
-  // });
+    it("throws NotFoundException for an unknown id", async () => {
+      await expect(
+        service.updatePayment("missing-id", {
+          status: TransactionStatus.COMPLETED,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("rejects an empty id", async () => {
+      await expect(
+        service.updatePayment("", { status: TransactionStatus.COMPLETED }),
+      ).rejects.toMatchObject({ statusCode: HttpStatus.BAD_REQUEST });
+    });
+
+    it("rejects a status that is not part of the enum", async () => {
+      const created = await service.createPayment(buildPayment());
+
+      await expect(
+        service.updatePayment(created.id, {
+          status: "refunded" as TransactionStatus,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+      });
+    });
+
+    it("logs the status change", async () => {
+      const created = await service.createPayment(buildPayment());
+
+      await service.updatePayment(created.id, {
+        status: TransactionStatus.COMPLETED,
+      });
+
+      expect(loggerDriver.messagesAt("info")).toContain(
+        "Transaction status updated",
+      );
+    });
+
+    describe("allowed status transitions", () => {
+      const allowed: [TransactionStatus, TransactionStatus][] = [
+        [TransactionStatus.PENDING, TransactionStatus.PROCESSING],
+        [TransactionStatus.PENDING, TransactionStatus.COMPLETED],
+        [TransactionStatus.PENDING, TransactionStatus.FAILED],
+        [TransactionStatus.PROCESSING, TransactionStatus.COMPLETED],
+        [TransactionStatus.PROCESSING, TransactionStatus.FAILED],
+        [TransactionStatus.COMPLETED, TransactionStatus.REVERSED],
+      ];
+
+      it.each(allowed)("allows %s -> %s", async (from, to) => {
+        const created = await createAt(from);
+
+        const updated = await service.updatePayment(created.id, { status: to });
+
+        expect(updated.status).toBe(to);
+      });
+    });
+
+    describe("rejected status transitions", () => {
+      const rejected: [TransactionStatus, TransactionStatus][] = [
+        [TransactionStatus.FAILED, TransactionStatus.COMPLETED],
+        [TransactionStatus.FAILED, TransactionStatus.PENDING],
+        [TransactionStatus.FAILED, TransactionStatus.PROCESSING],
+        [TransactionStatus.FAILED, TransactionStatus.REVERSED],
+        [TransactionStatus.COMPLETED, TransactionStatus.PENDING],
+        [TransactionStatus.COMPLETED, TransactionStatus.PROCESSING],
+        [TransactionStatus.COMPLETED, TransactionStatus.FAILED],
+        [TransactionStatus.REVERSED, TransactionStatus.COMPLETED],
+        [TransactionStatus.REVERSED, TransactionStatus.PENDING],
+        [TransactionStatus.PROCESSING, TransactionStatus.PENDING],
+        [TransactionStatus.PENDING, TransactionStatus.REVERSED],
+      ];
+
+      it.each(rejected)("rejects %s -> %s", async (from, to) => {
+        const created = await createAt(from);
+
+        await expect(
+          service.updatePayment(created.id, { status: to }),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it("answers with a 409 and the statuses that are allowed", async () => {
+        const created = await createAt(TransactionStatus.FAILED);
+
+        await expect(
+          service.updatePayment(created.id, {
+            status: TransactionStatus.COMPLETED,
+          }),
+        ).rejects.toMatchObject({
+          statusCode: HttpStatus.CONFLICT,
+          message: ResponseMessage.INVALID_STATUS_TRANSITION,
+          details: {
+            currentStatus: TransactionStatus.FAILED,
+            requestedStatus: TransactionStatus.COMPLETED,
+            allowedStatuses: [],
+          },
+        });
+      });
+
+      it("rejects a repeat of the current status", async () => {
+        const created = await service.createPayment(buildPayment());
+
+        await expect(
+          service.updatePayment(created.id, {
+            status: TransactionStatus.PENDING,
+          }),
+        ).rejects.toThrow(ConflictException);
+      });
+    });
+  });
 });

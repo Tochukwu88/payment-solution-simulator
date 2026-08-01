@@ -52,3 +52,7 @@ i want you to create DTOS to create and update transactions apply validation on 
 ## 014 — 2026-08-01
 
 so next we need to build the createPayment method,after validation, compute an indepotency hash with the dto,then we need to find a transaction by reference, which is the idempotency key, if that transaction exists  compare the hash of the existing transaction with the new one, if they are not the same throw an error message else return the transaction details to the client, validatae the amount is greater than 0 else throw an error , save the transaction in a pending state and return the saved transaction, wrap the logic in a try and catch block and return an internal server error in the catch block
+
+## 015 — 2026-08-01
+
+now the update method , i want you to  a status transition validation on  statuses basically if something is failed it can not be moved to completed or pending, a completed transaction can be reversed etc

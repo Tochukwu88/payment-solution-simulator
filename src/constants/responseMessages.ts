@@ -48,6 +48,7 @@ export enum ResponseMessage {
   REQUEST_TIMEOUT = "The request timed out",
   CONFLICT = "Resource already exists",
   IDEMPOTENCY_MISMATCH = "A transaction with this reference already exists with different details",
+  INVALID_STATUS_TRANSITION = "The transaction cannot move to the requested status",
   INVALID_AMOUNT = "amount must be greater than zero",
   GONE = "This resource is no longer available",
   PAYLOAD_TOO_LARGE = "Request payload is too large",
