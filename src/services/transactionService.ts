@@ -14,6 +14,7 @@ import {
   BadRequestException,
   ConflictException,
   InternalServerErrorException,
+  NotFoundException,
   NotImplementedException,
   isHttpException,
 } from "../exceptions";
@@ -45,12 +46,27 @@ export class TransactionService {
 
       return await this.savePendingTransaction(dto, idempotencyHash);
     } catch (error) {
-      return this.failCreatePayment(error, dto.reference);
+      this.logger.error("Failed to create payment", error, {
+        reference: dto.reference,
+      });
+      return this.throwError(error);
     }
   }
 
   async retrievePayment(id: string): Promise<Transaction> {
-    throw new NotImplementedException();
+    try {
+      if (!id) {
+        throw new BadRequestException(ResponseMessage.MISSING_REQUIRED_FIELDS);
+      }
+      const transaction = await this.transactionRepository.findById(id);
+      if (!transaction) {
+        throw new NotFoundException(ResponseMessage.NOT_FOUND);
+      }
+      return transaction;
+    } catch (error) {
+      this.logger.error("Failed to retrieve payment", error);
+      return this.throwError(error);
+    }
   }
 
   async updatePayment(
@@ -102,12 +118,10 @@ export class TransactionService {
     return transaction;
   }
 
-  private failCreatePayment(error: unknown, reference: string): never {
+  private throwError(error: unknown): never {
     if (isHttpException(error)) {
       throw error;
     }
-
-    this.logger.error("Failed to create payment", error, { reference });
 
     throw new InternalServerErrorException();
   }

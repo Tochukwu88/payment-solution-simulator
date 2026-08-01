@@ -178,39 +178,39 @@ describe("TransactionService", () => {
     });
   });
 
-  // describe("retrievePayment", () => {
-  //   it("returns the stored transaction", async () => {
-  //     const created = await service.createPayment(buildPayment());
+  describe("retrievePayment", () => {
+    it("returns the stored transaction", async () => {
+      const created = await service.createPayment(buildPayment());
 
-  //     const found = await service.retrievePayment(created.id);
+      const found = await service.retrievePayment(created.id);
 
-  //     expect(found.id).toBe(created.id);
-  //     expect(found.reference).toBe("TXN-001");
-  //   });
+      expect(found.id).toBe(created.id);
+      expect(found.reference).toBe("TXN-001");
+    });
 
-  //   it("throws NotFoundException for an unknown id", async () => {
-  //     await expect(service.retrievePayment("missing-id")).rejects.toThrow(
-  //       NotFoundException,
-  //     );
-  //   });
+    it("throws NotFoundException for an unknown id", async () => {
+      await expect(service.retrievePayment("missing-id")).rejects.toThrow(
+        NotFoundException,
+      );
+    });
 
-  //   it("throws with a 404 status so the error handler answers correctly", async () => {
-  //     await expect(service.retrievePayment("missing-id")).rejects.toMatchObject(
-  //       { statusCode: HttpStatus.NOT_FOUND },
-  //     );
-  //   });
+    it("throws with a 404 status so the error handler answers correctly", async () => {
+      await expect(service.retrievePayment("missing-id")).rejects.toMatchObject(
+        { statusCode: HttpStatus.NOT_FOUND },
+      );
+    });
 
-  //   it("returns a copy that cannot corrupt storage", async () => {
-  //     const created = await service.createPayment(buildPayment());
+    it("returns a copy that cannot corrupt storage", async () => {
+      const created = await service.createPayment(buildPayment());
 
-  //     const found = await service.retrievePayment(created.id);
-  //     found.amount = 1;
+      const found = await service.retrievePayment(created.id);
+      found.amount = 1;
 
-  //     await expect(service.retrievePayment(created.id)).resolves.toMatchObject({
-  //       amount: 5000,
-  //     });
-  //   });
-  // });
+      await expect(service.retrievePayment(created.id)).resolves.toMatchObject({
+        amount: 5000,
+      });
+    });
+  });
 
   // describe("updatePayment", () => {
   //   it("moves the transaction to the requested status", async () => {
