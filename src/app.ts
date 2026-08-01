@@ -10,6 +10,7 @@ import { logger } from "./common/logger";
 import { sendSuccess } from "./common/httpResponse";
 import { globalErrorHandler, routeNotFoundHandler } from "./middlewares";
 import { mountApiDocumentation } from "./docs";
+import { buildApiRouter } from "./routes";
 
 const app: Express = express();
 
@@ -45,6 +46,8 @@ mountApiDocumentation(app);
 app.get("/", (req: Request, res: Response) => {
   return sendSuccess(res, { message: "Server is up and running" });
 });
+
+app.use(buildApiRouter());
 
 app.use(routeNotFoundHandler);
 app.use(globalErrorHandler);

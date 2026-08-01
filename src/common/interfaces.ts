@@ -49,6 +49,18 @@ export interface TransactionProperties {
   updatedAt?: Date;
 }
 
+export interface TransactionResponse {
+  id: string;
+  reference: string;
+  type: string;
+  amount: number;
+  status: TransactionStatus;
+  description?: string;
+  metadata: TransactionMetadata;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export type CreateTransactionInput = Omit<
   TransactionProperties,
   "id" | "createdAt" | "updatedAt"
