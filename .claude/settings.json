@@ -4,7 +4,15 @@
       "PowerShell(npx tsc -p tsconfig.test.json)",
       "PowerShell(if \\($?\\) { \"test typecheck OK\" })",
       "PowerShell(if \\($?\\) { \"build typecheck OK\" })",
-      "PowerShell(if \\($?\\) { \"typecheck OK\" })"
+      "PowerShell(if \\($?\\) { \"typecheck OK\" })",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(npx tsc -p tsconfig.test.json 2>&1)",
+      "Bash(perl -0pi -e 's/updatePayment\\\\\\(\\(\\\\s*\\)\\([^,]+?\\),\\(\\\\s*\\)\\(TransactionStatus\\\\.[A-Z_]+\\),/updatePayment\\($1$2,$3{ status: $4 },/gs' tests/transactionService.test.ts)",
+      "Bash(perl -0pi -e 's/updatePayment\\\\\\(\\(\\\\s*\\)\\([^,]+?\\),\\(\\\\s*\\)\\(TransactionStatus\\\\.[A-Z_]+\\),/updatePayment\\(${1}${2},${3}\\\\{ status: ${4} \\\\},/gs' tests/transactionService.test.ts)",
+      "Bash(perl -0pi -e 's/updatePayment\\\\\\(\\([^,\\(\\)]+?\\),\\\\s*\\(TransactionStatus\\\\.[A-Z_]+\\)\\\\\\)/updatePayment\\(${1}, \\\\{ status: ${2} \\\\}\\)/gs' tests/transactionService.test.ts)",
+      "PowerShell(Remove-Item c:\\\\Users\\\\teece\\\\Documents\\\\frontier_dental\\\\dtoSmoke.ts -Confirm:$false)",
+      "PowerShell(if \\($?\\) { \"src typecheck OK\" })",
+      "Bash(perl -pi -e 's/findByIdempotencyKey\\\\\\(\"hash-001\"\\\\\\)/findByIdempotencyKey\\(\"TXN-001\"\\)/g; s/findByIdempotencyKey\\\\\\(\"hash-002\"\\\\\\)/findByIdempotencyKey\\(\"TXN-002\"\\)/g; s/findByIdempotencyKey\\\\\\(\"unknown-hash\"\\\\\\)/findByIdempotencyKey\\(\"TXN-UNKNOWN\"\\)/g' tests/inMemoryTransactionRepository.test.ts)"
     ]
   }
 }

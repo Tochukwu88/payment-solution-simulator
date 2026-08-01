@@ -47,6 +47,8 @@ export enum ResponseMessage {
   METHOD_NOT_ALLOWED = "HTTP method not allowed for this endpoint",
   REQUEST_TIMEOUT = "The request timed out",
   CONFLICT = "Resource already exists",
+  IDEMPOTENCY_MISMATCH = "A transaction with this reference already exists with different details",
+  INVALID_AMOUNT = "amount must be greater than zero",
   GONE = "This resource is no longer available",
   PAYLOAD_TOO_LARGE = "Request payload is too large",
   UNSUPPORTED_MEDIA_TYPE = "Unsupported content type",

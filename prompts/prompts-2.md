@@ -40,3 +40,15 @@ under services folder create a transaction service that depends on the transacti
 ## 011 — 2026-08-01
 
 i have installed jest , and created a folder called tests i want you to come up with reasonable test cases for the transaction service and write the test also same for the inmemory transaction repository for example an error should be try creating a payment twice with the same reference it should create the first transaction and return the transaction details created from the first on the second retry , basically there should not be double transaction with the same refrence
+
+## 012 — 2026-08-01
+
+create a function that creates an idempotency hash using the sha-256 algorithm the function can accept a number of inputs
+
+## 013 — 2026-08-01
+
+i want you to create DTOS to create and update transactions apply validation on the DTOs and throw descriptive error responses with the approriate status code , then add the dtos to the create and update method in transaction service
+
+## 014 — 2026-08-01
+
+so next we need to build the createPayment method,after validation, compute an indepotency hash with the dto,then we need to find a transaction by reference, which is the idempotency key, if that transaction exists  compare the hash of the existing transaction with the new one, if they are not the same throw an error message else return the transaction details to the client, validatae the amount is greater than 0 else throw an error , save the transaction in a pending state and return the saved transaction, wrap the logic in a try and catch block and return an internal server error in the catch block

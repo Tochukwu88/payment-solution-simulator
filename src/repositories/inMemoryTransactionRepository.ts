@@ -80,7 +80,7 @@ export class InMemoryTransactionRepository implements TransactionRepository {
   private store(transaction: Transaction): void {
     this.transactionsById.set(transaction.id, copyTransaction(transaction));
     this.transactionIdByIdempotencyKey.set(
-      transaction.idempotencyHash,
+      transaction.reference,
       transaction.id,
     );
   }

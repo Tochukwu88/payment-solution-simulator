@@ -97,10 +97,21 @@ describe("InMemoryTransactionRepository", () => {
   });
 
   describe("findByIdempotencyKey", () => {
+    it("indexes on the reference rather than the stored hash", async () => {
+      await repository.create(buildInput());
+
+      await expect(
+        repository.findByIdempotencyKey("hash-001"),
+      ).resolves.toBeNull();
+      await expect(
+        repository.findByIdempotencyKey("TXN-001"),
+      ).resolves.not.toBeNull();
+    });
+
     it("resolves the transaction through the idempotency index", async () => {
       const created = await repository.create(buildInput());
 
-      const found = await repository.findByIdempotencyKey("hash-001");
+      const found = await repository.findByIdempotencyKey("TXN-001");
 
       expect(found?.id).toBe(created.id);
       expect(found?.reference).toBe("TXN-001");
@@ -110,7 +121,7 @@ describe("InMemoryTransactionRepository", () => {
       await repository.create(buildInput());
 
       await expect(
-        repository.findByIdempotencyKey("unknown-hash"),
+        repository.findByIdempotencyKey("TXN-UNKNOWN"),
       ).resolves.toBeNull();
     });
 
@@ -121,10 +132,10 @@ describe("InMemoryTransactionRepository", () => {
       );
 
       await expect(
-        repository.findByIdempotencyKey("hash-001"),
+        repository.findByIdempotencyKey("TXN-001"),
       ).resolves.toMatchObject({ id: first.id });
       await expect(
-        repository.findByIdempotencyKey("hash-002"),
+        repository.findByIdempotencyKey("TXN-002"),
       ).resolves.toMatchObject({ id: second.id });
     });
   });
@@ -204,7 +215,7 @@ describe("InMemoryTransactionRepository", () => {
       await repository.update(created.id, TransactionStatus.COMPLETED);
 
       await expect(
-        repository.findByIdempotencyKey("hash-001"),
+        repository.findByIdempotencyKey("TXN-001"),
       ).resolves.toMatchObject({
         id: created.id,
         status: TransactionStatus.COMPLETED,

@@ -10,7 +10,7 @@ import {
   isHttpException,
 } from "../exceptions";
 
-function toValidationIssues(error: ZodError): unknown {
+export function toValidationIssues(error: ZodError): unknown {
   return error.issues.map((issue) => ({
     field: issue.path.join("."),
     message: issue.message,
