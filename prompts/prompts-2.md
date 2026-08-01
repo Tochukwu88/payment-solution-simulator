@@ -68,3 +68,22 @@ create a mapper that strips the idempotency hash when returning transaction to t
 ## 018 — 2026-08-01
 
 add a docker file so this can be easily run by anyone
+
+## 019 — 2026-08-01
+
+to simulate async payment processing, we need to make use of an outbox pattern, so when a transaction has been created we save it to an outbox, then a background job picks it up processes the payment setting the status to processing ,so another job wont pick it up, when its completed or failed update the statues of the transaction accordingly, for the outbox we should make use of an array data structure , this will be the outbox class structure
+
+```
+Table outbox {
+  id string
+  transaction_id
+  event_type enum
+  payload json
+  processed_at timestamptz
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+```
+
+HAVE a method in transaction service that processes payment , so you can simulate a call to a provider or someting maybe using a set timeout , simulate faileed payment as well as completed payment, maybe failed payment should be like less than 2%
+so create the outbox class in entities folder with the appropriate repository, then add a background job that fetches pending outbox envents processes them, dont forget to save event to outbox after a payment has been created

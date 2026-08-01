@@ -3,12 +3,20 @@ import { TransactionStatus } from "../src/constants/transactionStatus";
 import { Transaction } from "../src/entities/transaction";
 import { HttpStatus, ResponseMessage } from "../src/constants/responseMessages";
 import { ConflictException, NotFoundException } from "../src/exceptions";
-import { InMemoryTransactionRepository } from "../src/repositories";
+import {
+  InMemoryOutboxRepository,
+  InMemoryTransactionRepository,
+} from "../src/repositories";
 import { TransactionService } from "../src/services";
+import { OutboxEventType } from "../src/constants/outboxEventType";
 import {
   buildRecordingLogger,
   type RecordingLoggerDriver,
 } from "./support/recordingLogger";
+import {
+  StubPaymentProvider,
+  ThrowingPaymentProvider,
+} from "./support/stubPaymentProvider";
 
 function buildPayment(
   overrides: Partial<CreatePaymentInput> = {},
@@ -25,6 +33,7 @@ function buildPayment(
 
 describe("TransactionService", () => {
   let repository: InMemoryTransactionRepository;
+  let outboxRepository: InMemoryOutboxRepository;
   let loggerDriver: RecordingLoggerDriver;
   let service: TransactionService;
 
@@ -32,8 +41,14 @@ describe("TransactionService", () => {
     const recording = buildRecordingLogger();
 
     repository = new InMemoryTransactionRepository();
+    outboxRepository = new InMemoryOutboxRepository();
     loggerDriver = recording.driver;
-    service = new TransactionService(repository, recording.logger);
+    service = new TransactionService(
+      repository,
+      outboxRepository,
+      recording.logger,
+      new StubPaymentProvider(true),
+    );
   });
 
   describe("createPayment", () => {
@@ -175,6 +190,49 @@ describe("TransactionService", () => {
 
       expect(second.id).not.toBe(first.id);
       expect(second.idempotencyHash).not.toBe(first.idempotencyHash);
+    });
+
+    describe("outbox", () => {
+      it("writes a pending payment.created event", async () => {
+        const created = await service.createPayment(buildPayment());
+
+        const pending = await outboxRepository.findPending();
+
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          transactionId: created.id,
+          eventType: OutboxEventType.PAYMENT_CREATED,
+          processedAt: null,
+        });
+      });
+
+      it("carries a payload describing the payment", async () => {
+        const created = await service.createPayment(buildPayment());
+
+        const [event] = await outboxRepository.findPending();
+
+        expect(event.payload).toEqual({
+          transactionId: created.id,
+          reference: "TXN-001",
+          type: "debit",
+          amount: 5000,
+          status: TransactionStatus.PENDING,
+        });
+      });
+
+      it("does not write a second event for an idempotent retry", async () => {
+        await service.createPayment(buildPayment());
+        await service.createPayment(buildPayment());
+
+        await expect(outboxRepository.findPending()).resolves.toHaveLength(1);
+      });
+
+      it("writes one event per distinct payment", async () => {
+        await service.createPayment(buildPayment());
+        await service.createPayment(buildPayment({ reference: "TXN-002" }));
+
+        await expect(outboxRepository.findPending()).resolves.toHaveLength(2);
+      });
     });
   });
 
@@ -369,6 +427,114 @@ describe("TransactionService", () => {
           }),
         ).rejects.toThrow(ConflictException);
       });
+    });
+  });
+
+  describe("processPayment", () => {
+    function buildService(provider: StubPaymentProvider) {
+      const recording = buildRecordingLogger();
+
+      return {
+        service: new TransactionService(
+          repository,
+          outboxRepository,
+          recording.logger,
+          provider,
+        ),
+        driver: recording.driver,
+      };
+    }
+
+    it("completes the payment when the provider succeeds", async () => {
+      const created = await service.createPayment(buildPayment());
+
+      const processed = await service.processPayment(created.id);
+
+      expect(processed.status).toBe(TransactionStatus.COMPLETED);
+    });
+
+    it("fails the payment when the provider declines", async () => {
+      const provider = new StubPaymentProvider(false, "declined");
+      const { service: failing } = buildService(provider);
+      const created = await failing.createPayment(buildPayment());
+
+      const processed = await failing.processPayment(created.id);
+
+      expect(processed.status).toBe(TransactionStatus.FAILED);
+    });
+
+    it("claims the transaction as processing before calling the provider", async () => {
+      const created = await service.createPayment(buildPayment());
+      const seenStatuses: TransactionStatus[] = [];
+
+      jest
+        .spyOn(repository, "update")
+        .mockImplementation(async (id, status) => {
+          seenStatuses.push(status);
+          return repository.findById(id);
+        });
+
+      await service.processPayment(created.id);
+
+      expect(seenStatuses[0]).toBe(TransactionStatus.PROCESSING);
+    });
+
+    it("persists the final status", async () => {
+      const created = await service.createPayment(buildPayment());
+
+      await service.processPayment(created.id);
+
+      await expect(repository.findById(created.id)).resolves.toMatchObject({
+        status: TransactionStatus.COMPLETED,
+      });
+    });
+
+    it("passes the claimed transaction to the provider", async () => {
+      const provider = new StubPaymentProvider(true);
+      const { service: tracked } = buildService(provider);
+      const created = await tracked.createPayment(buildPayment());
+
+      await tracked.processPayment(created.id);
+
+      expect(provider.chargedTransactionIds).toEqual([created.id]);
+    });
+
+    it("does not charge a transaction that is already being processed", async () => {
+      const provider = new StubPaymentProvider(true);
+      const { service: tracked } = buildService(provider);
+      const created = await tracked.createPayment(buildPayment());
+      await repository.update(created.id, TransactionStatus.PROCESSING);
+
+      const result = await tracked.processPayment(created.id);
+
+      expect(provider.chargedTransactionIds).toEqual([]);
+      expect(result.status).toBe(TransactionStatus.PROCESSING);
+    });
+
+    it("does not re-run a settled transaction", async () => {
+      const provider = new StubPaymentProvider(true);
+      const { service: tracked } = buildService(provider);
+      const created = await tracked.createPayment(buildPayment());
+      await repository.update(created.id, TransactionStatus.FAILED);
+
+      const result = await tracked.processPayment(created.id);
+
+      expect(provider.chargedTransactionIds).toEqual([]);
+      expect(result.status).toBe(TransactionStatus.FAILED);
+    });
+
+    it("logs the outcome", async () => {
+      const created = await service.createPayment(buildPayment());
+
+      await service.processPayment(created.id);
+
+      expect(loggerDriver.messagesAt("info")).toContain("Payment processed");
+    });
+
+    it("throws NotFoundException for an unknown transaction", async () => {
+      await expect(service.processPayment("missing-id")).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

@@ -1,5 +1,7 @@
+import { OutboxEventType } from "../constants/outboxEventType";
 import { HttpStatus } from "../constants/responseMessages";
 import { TransactionStatus } from "../constants/transactionStatus";
+import type { Transaction } from "../entities/transaction";
 
 export interface HttpErrorResponse {
   success: false;
@@ -70,3 +72,29 @@ export type CreatePaymentInput = Omit<
   CreateTransactionInput,
   "status" | "idempotencyHash"
 >;
+
+export type OutboxPayload = Record<string, unknown>;
+
+export interface OutboxEventProperties {
+  id: string;
+  transactionId: string;
+  eventType: OutboxEventType;
+  payload: OutboxPayload;
+  processedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export type CreateOutboxEventInput = Omit<
+  OutboxEventProperties,
+  "id" | "processedAt" | "createdAt" | "updatedAt"
+>;
+
+export interface PaymentOutcome {
+  successful: boolean;
+  reason?: string;
+}
+
+export interface PaymentProvider {
+  charge(transaction: Transaction): Promise<PaymentOutcome>;
+}

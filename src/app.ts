@@ -11,6 +11,7 @@ import { sendSuccess } from "./common/httpResponse";
 import { globalErrorHandler, routeNotFoundHandler } from "./middlewares";
 import { mountApiDocumentation } from "./docs";
 import { buildApiRouter } from "./routes";
+import { outboxProcessor } from "./container";
 
 const app: Express = express();
 
@@ -54,4 +55,5 @@ app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
+  outboxProcessor.start();
 });

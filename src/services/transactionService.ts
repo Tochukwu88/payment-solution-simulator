@@ -1,5 +1,7 @@
 import { buildIdempotencyHash } from "../common/idempotency";
+import type { PaymentOutcome, PaymentProvider } from "../common/interfaces";
 import type { AppLogger } from "../common/logger/appLogger";
+import { OutboxEventType } from "../constants/outboxEventType";
 import { ResponseMessage } from "../constants/responseMessages";
 import {
   allowedNextStatuses,
@@ -21,12 +23,15 @@ import {
   NotFoundException,
   isHttpException,
 } from "../exceptions";
-import type { TransactionRepository } from "../repositories";
+import type { OutboxRepository, TransactionRepository } from "../repositories";
+import { SimulatedPaymentProvider } from "./simulatedPaymentProvider";
 
 export class TransactionService {
   constructor(
     private readonly transactionRepository: TransactionRepository,
+    private readonly outboxRepository: OutboxRepository,
     private readonly logger: AppLogger,
+    private readonly paymentProvider: PaymentProvider = new SimulatedPaymentProvider(),
   ) {}
 
   async createPayment(payload: CreateTransactionDto): Promise<Transaction> {
@@ -105,6 +110,55 @@ export class TransactionService {
     }
   }
 
+  async processPayment(id: string): Promise<Transaction> {
+    const claimedTransaction = await this.claimTransaction(id);
+
+    if (claimedTransaction === null) {
+      return this.retrievePayment(id);
+    }
+
+    const outcome = await this.paymentProvider.charge(claimedTransaction);
+
+    return this.settleTransaction(claimedTransaction, outcome);
+  }
+
+  private async claimTransaction(id: string): Promise<Transaction | null> {
+    const transaction = await this.retrievePayment(id);
+
+    if (!transaction.isPending()) {
+      this.logger.warn("Skipping transaction that is already claimed", {
+        transactionId: transaction.id,
+        status: transaction.status,
+      });
+
+      return null;
+    }
+
+    return this.updatePayment(id, { status: TransactionStatus.PROCESSING });
+  }
+
+  private async settleTransaction(
+    transaction: Transaction,
+    outcome: PaymentOutcome,
+  ): Promise<Transaction> {
+    const status = outcome.successful
+      ? TransactionStatus.COMPLETED
+      : TransactionStatus.FAILED;
+
+    const settledTransaction = await this.updatePayment(transaction.id, {
+      status,
+    });
+
+    this.logger.info("Payment processed", {
+      transactionId: settledTransaction.id,
+      reference: settledTransaction.reference,
+      status: settledTransaction.status,
+      reason: outcome.reason,
+    });
+
+    return settledTransaction;
+  }
+
   private resolveExistingTransaction(
     existingTransaction: Transaction,
     idempotencyHash: string,
@@ -136,6 +190,8 @@ export class TransactionService {
       idempotencyHash,
     });
 
+    await this.recordPaymentCreatedEvent(transaction);
+
     this.logger.info("Transaction created", {
       reference: transaction.reference,
       transactionId: transaction.id,
@@ -143,6 +199,22 @@ export class TransactionService {
     });
 
     return transaction;
+  }
+
+  private async recordPaymentCreatedEvent(
+    transaction: Transaction,
+  ): Promise<void> {
+    await this.outboxRepository.create({
+      transactionId: transaction.id,
+      eventType: OutboxEventType.PAYMENT_CREATED,
+      payload: {
+        transactionId: transaction.id,
+        reference: transaction.reference,
+        type: transaction.type,
+        amount: transaction.amount,
+        status: transaction.status,
+      },
+    });
   }
 
   private async saveStatusChange(
