@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx tsc -p tsconfig.test.json)",
+      "PowerShell(if \\($?\\) { \"test typecheck OK\" })",
+      "PowerShell(if \\($?\\) { \"build typecheck OK\" })",
+      "PowerShell(if \\($?\\) { \"typecheck OK\" })"
+    ]
+  }
+}

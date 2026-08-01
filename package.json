@@ -4,7 +4,7 @@
   "description": "payment processing simulation",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "build": "tsc",
     "start": "node dist/app.js",
     "dev": "nodemon --exec tsx src/app.ts"
@@ -13,25 +13,26 @@
   "license": "ISC",
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.1",
     "helmet": "^8.3.0",
-    "pino-http": "^11.0.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1",
     "winston": "^3.19.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@swc/core": "^1.15.47",
+    "@swc/jest": "^0.2.39",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
     "@types/node": "^26.1.2",
     "@types/swagger-ui-express": "^4.1.8",
+    "jest": "^30.4.2",
     "nodemon": "^3.1.14",
-    "ts-node": "^10.9.2",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2"
   }

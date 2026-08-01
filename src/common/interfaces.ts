@@ -1,4 +1,5 @@
 import { HttpStatus } from "../constants/responseMessages";
+import { TransactionStatus } from "../constants/transactionStatus";
 
 export interface HttpErrorResponse {
   success: false;
@@ -33,3 +34,27 @@ export type LogContext = Record<string, unknown>;
 export interface LoggerDriver {
   log(level: LogLevel, message: string, context?: LogContext): void;
 }
+export type TransactionMetadata = Record<string, unknown>;
+
+export interface TransactionProperties {
+  id: string;
+  reference: string;
+  type: string;
+  amount: number;
+  status: TransactionStatus;
+  description?: string;
+  idempotencyHash: string;
+  metadata?: TransactionMetadata;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export type CreateTransactionInput = Omit<
+  TransactionProperties,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type CreatePaymentInput = Omit<
+  CreateTransactionInput,
+  "status" | "idempotencyHash"
+>;
