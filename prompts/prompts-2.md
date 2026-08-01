@@ -64,3 +64,7 @@ now create the controllers and routes to createPayment,retrievePayment and updat
 ## 017 — 2026-08-01
 
 create a mapper that strips the idempotency hash when returning transaction to the user
+
+## 018 — 2026-08-01
+
+add a docker file so this can be easily run by anyone

@@ -1,0 +1,16 @@
+node_modules
+dist
+logs
+coverage
+.git
+.gitignore
+.env
+.env.*
+prompts
+tests
+jest.config.js
+tsconfig.test.json
+Dockerfile
+.dockerignore
+docker-compose.yml
+*.log
