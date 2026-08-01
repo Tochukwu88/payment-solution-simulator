@@ -1,4 +1,5 @@
 import type { PaymentProvider } from "../src/common/interfaces";
+import { OutboxEventStatus } from "../src/constants/outboxEventStatus";
 import { OutboxEventType } from "../src/constants/outboxEventType";
 import { TransactionStatus } from "../src/constants/transactionStatus";
 import { OutboxEvent } from "../src/entities/outboxEvent";
@@ -88,6 +89,68 @@ describe("InMemoryOutboxRepository", () => {
   it("returns null when marking an unknown event", async () => {
     await expect(
       outboxRepository.markAsProcessed("missing-id"),
+    ).resolves.toBeNull();
+  });
+
+  it("starts life pending with no recorded error", async () => {
+    const event = await outboxRepository.create(buildEvent());
+
+    expect(event.status).toBe(OutboxEventStatus.PENDING);
+    expect(event.lastError).toBeNull();
+  });
+
+  it("records the reason when marking an event failed", async () => {
+    const event = await outboxRepository.create(buildEvent());
+
+    const failed = await outboxRepository.markAsFailed(
+      event.id,
+      "provider unreachable",
+    );
+
+    expect(failed?.status).toBe(OutboxEventStatus.FAILED);
+    expect(failed?.lastError).toBe("provider unreachable");
+    expect(failed?.hasFailed()).toBe(true);
+    expect(failed?.processedAt).toBeInstanceOf(Date);
+  });
+
+  it("clears any recorded error when an event later succeeds", async () => {
+    const event = await outboxRepository.create(buildEvent());
+    await outboxRepository.markAsFailed(event.id, "provider unreachable");
+
+    const processed = await outboxRepository.markAsProcessed(event.id);
+
+    expect(processed?.status).toBe(OutboxEventStatus.PROCESSED);
+    expect(processed?.lastError).toBeNull();
+  });
+
+  it("keeps failed events out of the pending queue", async () => {
+    const event = await outboxRepository.create(buildEvent());
+
+    await outboxRepository.markAsFailed(event.id, "provider unreachable");
+
+    await expect(outboxRepository.findPending()).resolves.toHaveLength(0);
+  });
+
+  it("exposes failed events separately for a future retry", async () => {
+    const failing = await outboxRepository.create(buildEvent("txn-1"));
+    const succeeding = await outboxRepository.create(buildEvent("txn-2"));
+    await outboxRepository.create(buildEvent("txn-3"));
+
+    await outboxRepository.markAsFailed(failing.id, "provider unreachable");
+    await outboxRepository.markAsProcessed(succeeding.id);
+
+    const failed = await outboxRepository.findFailed();
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      transactionId: "txn-1",
+      lastError: "provider unreachable",
+    });
+  });
+
+  it("returns null when marking an unknown event failed", async () => {
+    await expect(
+      outboxRepository.markAsFailed("missing-id", "boom"),
     ).resolves.toBeNull();
   });
 });
@@ -195,6 +258,59 @@ describe("OutboxProcessor", () => {
       "Failed to process outbox event",
     );
     await expect(outboxRepository.findPending()).resolves.toHaveLength(0);
+  });
+
+  it("records the failure reason on the event when processing throws", async () => {
+    const { service, processor } = buildProcessor(
+      new ThrowingPaymentProvider(new Error("provider unreachable")),
+    );
+    await service.createPayment(buildPayment());
+
+    await processor.drain();
+
+    const failed = await outboxRepository.findFailed();
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      status: OutboxEventStatus.FAILED,
+      lastError: "provider unreachable",
+    });
+  });
+
+  it("leaves the event neither pending nor failed when the payment completes", async () => {
+    const { service, processor } = buildProcessor();
+    await service.createPayment(buildPayment());
+
+    await processor.drain();
+
+    await expect(outboxRepository.findPending()).resolves.toHaveLength(0);
+    await expect(outboxRepository.findFailed()).resolves.toHaveLength(0);
+  });
+
+  it("treats a declined payment as a processed event, not a failed one", async () => {
+    const { service, processor } = buildProcessor(
+      new StubPaymentProvider(false, "declined"),
+    );
+    const created = await service.createPayment(buildPayment());
+
+    await processor.drain();
+
+    await expect(outboxRepository.findFailed()).resolves.toHaveLength(0);
+    await expect(
+      transactionRepository.findById(created.id),
+    ).resolves.toMatchObject({ status: TransactionStatus.FAILED });
+  });
+
+  it("does not retry a failed event on the next drain", async () => {
+    const { service, processor } = buildProcessor(
+      new ThrowingPaymentProvider(new Error("provider unreachable")),
+    );
+    await service.createPayment(buildPayment());
+
+    await processor.drain();
+    await processor.drain();
+
+    await expect(outboxRepository.findFailed()).resolves.toHaveLength(1);
   });
 
   it("does not overlap two concurrent drains", async () => {

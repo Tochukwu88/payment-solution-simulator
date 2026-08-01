@@ -1,3 +1,4 @@
+import { OutboxEventStatus } from "../constants/outboxEventStatus";
 import { OutboxEventType } from "../constants/outboxEventType";
 import { HttpStatus } from "../constants/responseMessages";
 import { TransactionStatus } from "../constants/transactionStatus";
@@ -80,6 +81,8 @@ export interface OutboxEventProperties {
   transactionId: string;
   eventType: OutboxEventType;
   payload: OutboxPayload;
+  status?: OutboxEventStatus;
+  lastError?: string | null;
   processedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
@@ -87,7 +90,7 @@ export interface OutboxEventProperties {
 
 export type CreateOutboxEventInput = Omit<
   OutboxEventProperties,
-  "id" | "processedAt" | "createdAt" | "updatedAt"
+  "id" | "status" | "lastError" | "processedAt" | "createdAt" | "updatedAt"
 >;
 
 export interface PaymentOutcome {

@@ -6,6 +6,10 @@ import type { TransactionService } from "../services";
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const DEFAULT_BATCH_SIZE = 10;
 
+function describeFailure(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class OutboxProcessor {
   private timer: NodeJS.Timeout | null = null;
   private draining = false;
@@ -68,14 +72,16 @@ export class OutboxProcessor {
   private async handleEvent(event: OutboxEvent): Promise<void> {
     try {
       await this.transactionService.processPayment(event.transactionId);
+
+      await this.outboxRepository.markAsProcessed(event.id);
     } catch (error) {
       this.logger.error("Failed to process outbox event", error, {
         outboxEventId: event.id,
         transactionId: event.transactionId,
         eventType: event.eventType,
       });
-    } finally {
-      await this.outboxRepository.markAsProcessed(event.id);
+
+      await this.outboxRepository.markAsFailed(event.id, describeFailure(error));
     }
   }
 }

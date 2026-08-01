@@ -87,3 +87,7 @@ Table outbox {
 
 HAVE a method in transaction service that processes payment , so you can simulate a call to a provider or someting maybe using a set timeout , simulate faileed payment as well as completed payment, maybe failed payment should be like less than 2%
 so create the outbox class in entities folder with the appropriate repository, then add a background job that fetches pending outbox envents processes them, dont forget to save event to outbox after a payment has been created
+
+## 020 — 2026-08-01
+
+add a field to detect when an event in the out box was processed succesfully or failed due to one error or another incase we want to implement a retry logic,note do not implement the retry
